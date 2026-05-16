@@ -174,8 +174,13 @@ function onResults(results) {
     const g = detectGesture(hl);
     if (g === state.lastSeenGesture) {
       state.gestureHysteresis++;
-      if (state.gestureHysteresis > 4) {
-        if (state.mode !== g) { finalize(); state.mode = g; }
+      // Increased hysteresis for more stability
+      if (state.gestureHysteresis > 6) {
+        if (state.mode !== g) { 
+          finalize(); 
+          state.mode = g; 
+          state.gestureHysteresis = 0; // Reset after change
+        }
       }
     } else {
       state.lastSeenGesture = g;
@@ -206,30 +211,33 @@ function onResults(results) {
 }
 
 function detectGesture(hl) {
-  // Check if a finger is extended by comparing distance from wrist to tip vs wrist to joint
   const isExt = (tip, mid, base) => {
     const d1 = Math.hypot(hl[0].x - hl[tip].x, hl[0].y - hl[tip].y);
     const d2 = Math.hypot(hl[0].x - hl[base].x, hl[0].y - hl[base].y);
-    return d1 > d2 * 1.2;
+    return d1 > d2 * 1.15; // Slightly more lenient extension
   };
 
-  const thumbUp = Math.hypot(hl[4].x - hl[2].x, hl[4].y - hl[2].y) > 0.04;
   const indexUp = isExt(8, 7, 6);
   const middleUp = isExt(12, 11, 10);
   const ringUp = isExt(16, 15, 14);
   const pinkyUp = isExt(20, 19, 18);
+  
+  const upCount = [indexUp, middleUp, ringUp, pinkyUp].filter(v => v).length;
 
   const pinch = Math.hypot(hl[4].x - hl[8].x, hl[4].y - hl[8].y) < 0.04;
   if (pinch) return 'pan';
   
-  if (indexUp && middleUp && ringUp && pinkyUp) {
+  // If 3 or more fingers are up, it's likely an eraser attempt
+  if (upCount >= 3) {
     const handWidth = Math.hypot(hl[5].x - hl[17].x, hl[5].y - hl[17].y);
     const handLength = Math.hypot(hl[0].x - hl[9].x, hl[0].y - hl[9].y);
-    // Even more lenient facing check
-    if ((handWidth / handLength) > 0.35) return 'erase';
+    // Very lenient check - if fingers are spread, it's an eraser
+    if ((handWidth / handLength) > 0.3) return 'erase';
+    return 'idle'; // Don't draw if trying to erase
   }
 
-  if (indexUp) return 'draw';
+  if (indexUp && upCount === 1) return 'draw';
+  
   return 'idle';
 }
 
